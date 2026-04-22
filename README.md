@@ -6,10 +6,10 @@ Todo
 👉 Streaming graph state (real-time UI)
 👉 Multi-agent parallel execution (not just nodes)
 👉 Tool selection via function calling (no JSON parsing)
-👉 Evaluation framework (auto scoring decisions) - Done
-👉 add reward learning loop (system improves itself) - Done
-👉 add confidence calibration - Done(Wiring left)
-👉 add failure feedback into planner - Done
+👉 Evaluation framework (auto scoring decisions)
+👉 add reward learning loop (system improves itself)
+👉 add confidence calibration
+👉 add failure feedback into planner
 👉 weight failures more than successes
 👉 evolve planner strategy selection
 👉 add automatic improvement

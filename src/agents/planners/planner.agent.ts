@@ -24,6 +24,7 @@ export async function plannerAgent(
     return {
       ...state,
       plan,
+      strategy: meta.strategy,
     };
   } catch (err: any) {
     console.error("Planner failed:", err);

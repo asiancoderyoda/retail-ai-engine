@@ -34,9 +34,13 @@ export async function contextNode(
       )
     ]);
 
-    const ragContext = [...failures, ...successes]
-      .map((m) => m.content)
-      .join("\n");
+    const ragContext = [
+      "FAILED DECISIONS (avoid these):",
+      ...failures.map(f => f.content),
+
+      "\nSUCCESSFUL DECISIONS (prefer these):",
+      ...successes.map(s => s.content),
+    ].join("\n");
 
     // const ragContext = memory
     //   .map((m) => {

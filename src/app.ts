@@ -73,7 +73,10 @@ async function main() {
       await vectorMemory.add(
         result.sku,
         JSON.stringify({
-          decision: result.decision,
+          decision: {
+            ...result.decision,
+            strategy: result.strategy,
+          },
           evaluation,
           approved: true,
           timestamp: Date.now(),
@@ -93,7 +96,10 @@ async function main() {
       await vectorMemory.add(
         result.sku,
         JSON.stringify({
-          decision: result.decision,
+          decision: {
+            ...result.decision,
+            strategy: result.strategy,
+          },
           evaluation,
           approved: false,
           reason: "user_rejected",
@@ -107,7 +113,7 @@ async function main() {
       );
     }
   } catch (err: any) {
-    console.error("❌ System Error:", err.message);
+    console.error("System Error:", err.message);
 
     /**
      * Store FAILURE memory
@@ -116,7 +122,10 @@ async function main() {
       await vectorMemory.add(
         result?.sku || "unknown",
         JSON.stringify({
-          decision: result?.decision,
+          decision: {
+            ...result?.decision,
+            strategy: result?.strategy,
+          },
           error: err.message,
           approved: false,
           failureType: "system_error",

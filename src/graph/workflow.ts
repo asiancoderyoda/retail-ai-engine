@@ -40,7 +40,8 @@ const GraphState = Annotation.Root({
   decision: Annotation<any>(),
   critique: Annotation<any>(),
 
-  plan: Annotation<PlanStep[]>(), // ✅ new
+  plan: Annotation<PlanStep[]>(),
+  strategy: Annotation<string | undefined>(),
   retries: Annotation<number>(),
   error: Annotation<string | undefined>(),
 });
@@ -158,16 +159,10 @@ export function buildGraph() {
      * Retry logic (safe)
      */
     .addConditionalEdges("criticNode", (state: GraphStateType) => {
-      /**
-       * Retry Logic. Disabled for now to save costs, but this is where you would implement a retry loop based on the critique.
-       * 
-       * const retries = state.retries ?? 0;
-       * 
-       * if (!state.critique?.valid && retries < 3) {
-       *  return "retryNode";
-       * }
-       * 
-       */
+      const retries = state.retries ?? 0;
+      if (!state.critique?.valid && retries < 3) {
+        return "retryNode";
+      }
       return END;
     })
     .addEdge("retryNode", "decisionNode");

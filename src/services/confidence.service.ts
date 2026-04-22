@@ -7,26 +7,35 @@ export async function calibrateConfidence(
     const history = await vectorMemory.search(
         sku,
         "evaluation score",
-        5
+        10
     );
 
-    const scores = history
-        .map((h) => {
-            try {
-                return JSON.parse(h?.content as string || "{}").evaluation?.score;
-            } catch {
-                return null;
-            }
-        })
-        .filter(Boolean);
+    let weightedScore = 0;
+    let totalWeight = 0;
 
-    if (scores.length === 0) return rawConfidence;
+    for (let i = 0; i < history.length; i++) {
+        try {
+            const parsed = JSON.parse(history[i]?.content as string || "{}");
 
-    const avgScore =
-        scores.reduce((a, b) => a + b, 0) / scores.length;
+            const score = parsed?.evaluation?.score ?? 0;
+            const approved = parsed?.approved;
+
+            /**
+             * 🔥 KEY: failures get MORE weight
+             */
+            const weight = approved ? 1 : 2;
+
+            weightedScore += score * weight;
+            totalWeight += weight;
+        } catch { }
+    }
+
+    if (totalWeight === 0) return rawConfidence;
+
+    const avgScore = weightedScore / totalWeight;
 
     /**
-     * Blend LLM confidence with actual performance
+     * Slight bias towards real performance
      */
-    return 0.5 * rawConfidence + 0.5 * avgScore;
+    return 0.4 * rawConfidence + 0.6 * avgScore;
 }

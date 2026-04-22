@@ -32,6 +32,7 @@ interface AgentState {
   plan?: PlanStep[];
   error?: string;
   retries?: number;
+  strategy?: string;
 }
 
 export type { AgentState, Inventory, Supplier, Forecast, PlanStep };
