@@ -1,13 +1,15 @@
+import { traceable } from "langsmith/traceable";
 import { getLLM } from "../config/llm";
 import { AgentState } from "../types";
-import { mcpTools } from "../tools/mcp.tools";
 import { getFailurePenalty } from "../services/failure.service";
 
 export async function decisionAgent(state: AgentState): Promise<AgentState> {
   const inventory = state.inventory;
   const supplier = state.supplier;
   const retries = state.retries ?? 0;
-  const gap = (inventory?.reorderPoint || 0) - (inventory?.stock || 0);
+
+  const gap =
+    (inventory?.reorderPoint || 0) - (inventory?.stock || 0);
 
   let strategyHint = "";
 
@@ -32,67 +34,95 @@ export async function decisionAgent(state: AgentState): Promise<AgentState> {
     },
   };
 
-  const res = await getLLM().invoke(
-    [
-      {
-        role: "system",
-        content: "You are an expert retail inventory optimizer.",
-      },
-      {
-        role: "user",
-        content: `
-          Inventory: ${JSON.stringify(inventory)}
-          Supplier: ${JSON.stringify(supplier)}
-          Forecast: ${JSON.stringify(state.forecast)}
-          Past Learnings: ${state.ragContext || "None"}
-          Retry Attempts: ${retries}
-          Strategy Hint: ${strategyHint}
-
-          IMPORTANT:
-          - NEVER repeat the same decision if it failed
-          - If retry > 0 → change strategy
-          - NEVER return quantity = 0
-          - Increase aggressiveness slightly on each retry
-
-          Decide reorder quantity.
-          `,
-      },
-    ],
+  const messages = [
     {
-      tools: [tool],
-      tool_choice: "auto",
+      role: "system",
+      content: "You are an expert retail inventory optimizer.",
+    },
+    {
+      role: "user",
+      content: `
+        Inventory: ${JSON.stringify(inventory)}
+        Supplier: ${JSON.stringify(supplier)}
+        Forecast: ${JSON.stringify(state.forecast)}
+        Past Learnings: ${state.ragContext || "None"}
+        Retry Attempts: ${retries}
+        Strategy Hint: ${strategyHint}
+
+        IMPORTANT:
+        - NEVER repeat the same decision if it failed
+        - If retry > 0 → change strategy
+        - NEVER return quantity = 0
+        - Increase aggressiveness slightly on each retry
+
+        Decide reorder quantity.
+      `,
+    },
+  ];
+
+  /**
+   * LangSmith trace wrapper
+   */
+  const tracedDecision = traceable(
+    async () => {
+      /**
+       * LLM call
+       */
+      const res = await getLLM().invoke(messages, {
+        tools: [tool],
+        tool_choice: "auto",
+      });
+
+      /**
+       * Extract decision
+       */
+      let decision = res.tool_calls?.[0]?.args || {
+        quantity: Math.max(gap, supplier?.moq || 0),
+        reason: "fallback",
+      };
+
+      /**
+       * Retry fallback
+       */
+      if (retries >= 3) {
+        decision = {
+          quantity: Math.max(gap, supplier?.moq || 0),
+          reason: "fallback after retries",
+        };
+      }
+
+      /**
+       * Failure penalty adjustment
+       */
+      const penalty = await getFailurePenalty(state.sku, {
+        quantity: decision.quantity,
+      });
+
+      if (penalty > 0.4) {
+        console.log("High failure penalty → adjusting decision");
+
+        decision.quantity = Math.max(
+          gap,
+          supplier?.moq || 0
+        );
+      }
+
+      return decision;
+    },
+    {
+      name: "Decision Agent",
+      metadata: {
+        sku: state.sku,
+        retries,
+        hasForecast: !!state.forecast,
+        hasContext: !!state.ragContext,
+      },
     }
   );
 
-  if ((state.retries ?? 0) >= 3) {
-    return {
-      ...state,
-      decision: {
-        quantity: Math.max(gap, state?.supplier?.moq || 0),
-        reason: "fallback after retries",
-      },
-    };
-  }
-
-  const decision = res.tool_calls?.[0]?.args || {
-    quantity: Math.max(gap, state?.supplier?.moq || 0),
-    reason: "fallback",
-  };
+  const decision = await tracedDecision();
 
   console.log("Decision:", decision);
-
-  const penalty = await getFailurePenalty(state.sku, {
-    quantity: decision.quantity,
-  });
-
-  if (penalty > 0.4) {
-    console.log("High failure penalty → adjusting decision");
-
-    decision.quantity = Math.max(
-      gap,
-      supplier?.moq || 0
-    );
-  }
 
   return {
     ...state,

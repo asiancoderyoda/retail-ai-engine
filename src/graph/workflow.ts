@@ -14,6 +14,7 @@ import {
   END,
   START,
 } from "@langchain/langgraph";
+import { traceable } from "langsmith/traceable";
 
 import { ragAgent } from "../agents/rag.agent";
 import { forecastAgent } from "../agents/forecast.agent";
@@ -51,12 +52,24 @@ export type GraphStateType = typeof GraphState.State;
 /**
  * Safe wrapper
  */
-function safeNode(fn: any) {
+function safeNode(fn: any, name: string) {
   return async (state: GraphStateType) => {
+    const traced = traceable(
+      async () => fn(state),
+      {
+        name,
+        metadata: {
+          sku: state.sku,
+          retries: state.retries ?? 0,
+        },
+      }
+    );
+
     try {
-      return await fn(state);
+      return await traced();
     } catch (err: any) {
-      console.error("❌ Node failed:", err);
+      console.error("Node failed:", err);
+
       return {
         ...state,
         error: err.message,
@@ -96,20 +109,20 @@ export function buildGraph() {
     /**
      * Context Node - fetches inventory, supplier, and RAG context
      */
-    .addNode("contextNode", safeNode(contextNode))
+    .addNode("contextNode", safeNode(contextNode, "Context Node"))
 
     /**
      * Planner
      */
-    .addNode("plannerNode", safeNode(plannerAgent))
+    .addNode("plannerNode", safeNode(plannerAgent, "Planner Node"))
 
     /**
      * Capability Nodes
      */
-    .addNode("ragNode", safeNode(ragAgent))
-    .addNode("forecastNode", safeNode(forecastAgent))
-    .addNode("decisionNode", safeNode(decisionAgent))
-    .addNode("criticNode", safeNode(criticAgent))
+    .addNode("ragNode", safeNode(ragAgent, "RAG Node"))
+    .addNode("forecastNode", safeNode(forecastAgent, "Forecast Node"))
+    .addNode("decisionNode", safeNode(decisionAgent, "Decision Node"))
+    .addNode("criticNode", safeNode(criticAgent, "Critic Node"))
     .addNode("mergeNode", mergeNode)
     .addNode("retryNode", retryNode)
 

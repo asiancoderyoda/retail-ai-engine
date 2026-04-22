@@ -6,7 +6,6 @@
  * 2. Sub planner → generates steps
  */
 
-import { calibrateConfidence } from "../../services/confidence.service";
 import { AgentState } from "../../types";
 import { subPlanner } from "./sub-planner.agent";
 import { debatePlanner } from "./debate-planner.agent";

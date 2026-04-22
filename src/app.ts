@@ -1,13 +1,18 @@
+import * as dotenv from "dotenv";
 import readline from "readline";
+import { traceable } from "langsmith/traceable";
+
 import { buildGraph } from "./graph/workflow";
-import { mcpTools } from "./tools/mcp.tools";
+import { mcpTools } from "./mcp/mcp.tools";
 import { vectorMemory } from "./memory/vector.memory";
 import { evaluateDecision } from "./services/evaluation.service";
-import * as dotenv from "dotenv";
 import { ensurePineConeIndex } from "./config/db";
 
 dotenv.config();
 
+/**
+ * CLI approval helper
+ */
 function askApproval(question: string): Promise<boolean> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -22,6 +27,9 @@ function askApproval(question: string): Promise<boolean> {
   });
 }
 
+/**
+ * Main execution flow
+ */
 async function main() {
   const graph = buildGraph();
 
@@ -29,7 +37,7 @@ async function main() {
 
   try {
     /**
-     * Run graph
+     * Run LangGraph
      */
     result = await graph.invoke({
       sku: "SKU_1",
@@ -38,7 +46,7 @@ async function main() {
     console.log("\n Proposed Decision:", result.decision);
 
     /**
-     * Safety check
+     * Safety validation
      */
     if (!result?.decision || typeof result.decision.quantity !== "number") {
       throw new Error("Invalid decision output");
@@ -51,7 +59,7 @@ async function main() {
     console.log("📊 Evaluation:", evaluation);
 
     /**
-     * 👤 Human approval
+     * Human approval
      */
     const approved = await askApproval("Approve this order?");
 
@@ -133,19 +141,47 @@ async function main() {
         }),
         {
           type: "failure",
-          score: 0, // hard penalty
+          score: 0,
           approved: false,
         }
       );
     } catch (memoryErr) {
       console.error("Failed to store failure memory:", memoryErr);
     }
+
+    /**
+     * IMPORTANT: rethrow so LangSmith marks failure
+     */
+    throw err;
   }
 }
 
-ensurePineConeIndex().then(() => {
-  console.log("Pinecone index ready");
-  main();
-}).catch((err) => {
-  console.error("Failed to ensure Pinecone index:", err);
+/**
+ * LangSmith trace wrapper
+ */
+const tracedMain = traceable(main, {
+  name: "Retail Decision Flow",
+  metadata: {
+    system: "retail-ai-engine",
+    version: "v1",
+  },
 });
+
+/**
+ * Bootstrap
+ */
+ensurePineConeIndex()
+  .then(async () => {
+    console.log("Pinecone index ready");
+
+    await tracedMain({
+      metadata: {
+        sku: "SKU_1",
+        runType: "demo",
+        timestamp: Date.now(),
+      },
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to ensure Pinecone index:", err);
+  });

@@ -1,3 +1,4 @@
+import { traceable } from "langsmith/traceable";
 import { z } from "zod";
 import { getLLM } from "../../config/llm";
 import { AgentState } from "../../types";
@@ -46,7 +47,7 @@ export async function basePlanner(
         `;
     }
 
-    return llm.invoke(`
+    const prompt = `
         You are a ${role}.
 
         Focus ONLY on:
@@ -87,5 +88,19 @@ export async function basePlanner(
 
         Return:
         strategy + reasoning + confidence
-    `);
+    `;
+
+    const tracedInvoke = traceable(
+        async () => llm.invoke(prompt),
+        {
+            name: `Planner LLM (${role})`,
+            metadata: {
+                sku: state.sku,
+                retries,
+                role,
+            },
+        }
+    );
+
+    return tracedInvoke();
 }

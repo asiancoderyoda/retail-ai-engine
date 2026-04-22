@@ -12,5 +12,8 @@ export async function retryNode(state: AgentState): Promise<AgentState> {
     return {
         ...state,
         retries,
+        _trace: {
+            retry: retries,
+        },
     };
 }

@@ -1,5 +1,5 @@
 import { AgentState } from "../../types";
-import { mcpTools } from "../../tools/mcp.tools";
+import { mcpTools } from "../../mcp/mcp.tools";
 import { vectorMemory } from "../../memory/vector.memory";
 
 export async function contextNode(
@@ -8,14 +8,9 @@ export async function contextNode(
   console.log("Context: Fetching data for", state.sku);
 
   try {
-    const [inventory, supplier, memory, failures, successes] = await Promise.all([
+    const [inventory, supplier, failures, successes] = await Promise.all([
       mcpTools.getInventory(state.sku),
       mcpTools.getSupplier(state.sku),
-      // vectorMemory.search(
-      //   state.sku,
-      //   "successful decisions, failed decisions, rejected orders, bad forecasts, past decisions, demand patterns, demand spikes"
-      // ),
-      [], // placeholder for memory search
       vectorMemory.search(
         state.sku,
         "bad decisions, failures",
@@ -41,21 +36,6 @@ export async function contextNode(
       "\nSUCCESSFUL DECISIONS (prefer these):",
       ...successes.map(s => s.content),
     ].join("\n");
-
-    // const ragContext = memory
-    //   .map((m) => {
-    //     try {
-    //       const parsed = JSON.parse(m?.content as string || "{}");
-    //       return `
-    //         Decision: ${JSON.stringify(parsed.decision)}
-    //         Score: ${parsed.evaluation?.score}
-    //         Approved: ${parsed.approved}
-    //       `;
-    //     } catch {
-    //       return m.content;
-    //     }
-    //   })
-    //   .join("\n");
 
     return {
       ...state,

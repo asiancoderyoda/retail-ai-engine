@@ -33,6 +33,7 @@ interface AgentState {
   error?: string;
   retries?: number;
   strategy?: string;
+  _trace?: any;
 }
 
 export type { AgentState, Inventory, Supplier, Forecast, PlanStep };
