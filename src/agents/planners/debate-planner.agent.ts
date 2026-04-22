@@ -7,7 +7,7 @@ import { getFailurePenalty } from "../../services/failure.service";
 
 export async function debatePlanner(state: AgentState) {
   /**
-   * Parallel execution of planners
+   * Parallel planners
    */
   const results = await Promise.all([
     inventoryPlanner(state),
@@ -16,35 +16,59 @@ export async function debatePlanner(state: AgentState) {
   ]);
 
   /**
-   * Calibrated confidence and failure penalty for each planner
+   * Score each planner
    */
   const scored = await Promise.all(
     results.map(async (r) => {
-      const calibrated = await calibrateConfidence(state.sku, r.confidence);
+      const calibrated = await calibrateConfidence(
+        state.sku,
+        r.confidence
+      );
 
-      const failurePenalty = await getFailurePenalty(state.sku, {
+      const penalty = await getFailurePenalty(state.sku, {
         strategy: r.strategy,
       });
+
+      /**
+       * Risk penalty
+       */
+      const riskPenalty =
+        r.riskLevel === "high"
+          ? 0.2
+          : r.riskLevel === "medium"
+            ? 0.1
+            : 0;
+
+      const finalScore = calibrated - penalty - riskPenalty;
 
       return {
         ...r,
         calibratedConfidence: calibrated,
-        failurePenalty,
-        finalScore: calibrated - failurePenalty,
+        failurePenalty: penalty,
+        riskPenalty,
+        finalScore,
       };
     })
   );
 
-  console.log("Planner candidates:", scored);
-
-  console.log("Reasonings:");
-  scored.forEach((s) =>
-    console.log(`- ${s.strategy}: ${s.reasoning}`)
-  );
-
+  console.log("Planner candidates:");
+  scored.forEach((s) => {
+    console.log(
+      `${s.strategy} | score=${s.finalScore.toFixed(2)} | risk=${s.riskLevel}`
+    );
+  });
 
   /**
-   * Pick best
+   * Force disagreement insight
+   */
+  const uniqueStrategies = new Set(scored.map((s) => s.strategy));
+
+  if (uniqueStrategies.size === 1) {
+    console.warn("All planners agreed — low diversity");
+  }
+
+  /**
+   * Select best
    */
   const best = scored.sort(
     (a, b) => b.finalScore - a.finalScore

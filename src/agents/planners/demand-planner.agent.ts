@@ -6,9 +6,12 @@ export function demandPlanner(state: AgentState) {
         state,
         "demand forecasting expert",
         `
-            - demand trends
-            - spikes
-            - seasonality
+            OBJECTIVE:
+            - Match demand precisely
+            - Minimize overstock
+            - Avoid holding costs
+
+            You should prefer demand_focus unless inventory risk is extreme
         `
     );
 }

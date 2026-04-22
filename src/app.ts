@@ -85,6 +85,11 @@ async function main() {
             ...result.decision,
             strategy: result.strategy,
           },
+          planner: {
+            confidence: result?.confidence,
+            riskLevel: result?.riskLevel,
+            finalScore: result?.finalScore,
+          },
           evaluation,
           approved: true,
           timestamp: Date.now(),
@@ -107,6 +112,11 @@ async function main() {
           decision: {
             ...result.decision,
             strategy: result.strategy,
+          },
+          planner: {
+            confidence: result?.confidence,
+            riskLevel: result?.riskLevel,
+            finalScore: result?.finalScore,
           },
           evaluation,
           approved: false,
@@ -133,6 +143,11 @@ async function main() {
           decision: {
             ...result?.decision,
             strategy: result?.strategy,
+          },
+          planner: {
+            confidence: result?.confidence,
+            riskLevel: result?.riskLevel,
+            finalScore: result?.finalScore,
           },
           error: err.message,
           approved: false,

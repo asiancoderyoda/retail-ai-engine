@@ -6,9 +6,12 @@ export function inventoryPlanner(state: AgentState) {
         state,
         "inventory optimization expert",
         `
-            - stock levels
-            - reorder point
-            - supplier lead time
+            OBJECTIVE:
+            - Avoid stockouts at ALL costs
+            - Over-ordering is acceptable
+            - Prioritize service level over cost
+
+            You should ALWAYS lean towards inventory_focus
         `
     );
 }

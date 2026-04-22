@@ -6,9 +6,12 @@ export function riskPlanner(state: AgentState) {
         state,
         "risk analyst",
         `
-            - overstock risk
-            - stockout risk
-            - uncertainty
+            OBJECTIVE:
+            - Balance stockout risk vs overstock cost
+            - Avoid extreme decisions
+            - Prefer stability
+
+            You should prefer balanced strategy
         `
     );
 }

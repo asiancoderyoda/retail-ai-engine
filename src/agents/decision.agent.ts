@@ -4,21 +4,50 @@ import { AgentState } from "../types";
 import { getFailurePenalty } from "../services/failure.service";
 
 export async function decisionAgent(state: AgentState): Promise<AgentState> {
-  const inventory = state.inventory;
-  const supplier = state.supplier;
+  const inventory = state.inventory!;
+  const supplier = state.supplier!;
   const retries = state.retries ?? 0;
 
-  const gap =
-    (inventory?.reorderPoint || 0) - (inventory?.stock || 0);
+  const stock = inventory.stock;
+  const reorderPoint = inventory.reorderPoint;
 
+  /**
+   * Deterministic baseline
+   */
+  const safetyBuffer = 10;
+  const targetStock = reorderPoint + safetyBuffer;
+
+  const gap = reorderPoint - stock;
+  const targetGap = targetStock - stock;
+
+  let baselineQty = Math.max(
+    gap,
+    targetGap,
+    supplier.moq
+  );
+
+  /**
+   * Retry scaling
+   */
+  baselineQty += retries * 2;
+
+  /**
+   * Planner signal
+   */
+  const planHint =
+    state.plan?.map((p) => `${p.step}(${p.confidence})`).join(", ") ||
+    "none";
+
+  /**
+   * Retry guidance
+   */
   let strategyHint = "";
-
   if (retries === 1) {
-    strategyHint = "Be slightly more aggressive.";
+    strategyHint = "Increase quantity moderately.";
   } else if (retries === 2) {
-    strategyHint = "Take a conservative but safe decision.";
+    strategyHint = "Increase quantity significantly.";
   } else if (retries >= 3) {
-    strategyHint = "Fallback to safe reorder logic.";
+    strategyHint = "Use safe deterministic fallback.";
   }
 
   const tool = {
@@ -46,66 +75,101 @@ export async function decisionAgent(state: AgentState): Promise<AgentState> {
         Supplier: ${JSON.stringify(supplier)}
         Forecast: ${JSON.stringify(state.forecast)}
         Past Learnings: ${state.ragContext || "None"}
+
+        Execution Plan:
+        ${planHint}
+
         Retry Attempts: ${retries}
         Strategy Hint: ${strategyHint}
 
-        IMPORTANT:
-        - NEVER repeat the same decision if it failed
-        - If retry > 0 → change strategy
-        - NEVER return quantity = 0
-        - Increase aggressiveness slightly on each retry
+        Previous Failure:
+        ${state.critique?.reason || "None"}
 
-        Decide reorder quantity.
+        Previous Quantity:
+        ${state.decision?.quantity || "None"}
+
+        STRICT RULES:
+        - Quantity MUST ensure final stock >= reorder point
+        - Prefer reaching target stock (reorderPoint + buffer)
+        - NEVER return quantity = 0
+        - DO NOT repeat failed quantity
+        - Adjust using failure reason
+
+        Return reorder quantity.
       `,
     },
   ];
 
-  /**
-   * LangSmith trace wrapper
-   */
   const tracedDecision = traceable(
     async () => {
-      /**
-       * LLM call
-       */
       const res = await getLLM().invoke(messages, {
         tools: [tool],
         tool_choice: "auto",
       });
 
       /**
-       * Extract decision
+       * Extract decision safely
        */
-      let decision = res.tool_calls?.[0]?.args || {
-        quantity: Math.max(gap, supplier?.moq || 0),
-        reason: "fallback",
-      };
+      let decision = res.tool_calls?.[0]?.args;
 
       /**
-       * Retry fallback
+       * Strong validation
        */
-      if (retries >= 3) {
+      if (
+        !decision ||
+        typeof decision.quantity !== "number" ||
+        !Number.isFinite(decision.quantity) ||
+        decision.quantity <= 0
+      ) {
         decision = {
-          quantity: Math.max(gap, supplier?.moq || 0),
-          reason: "fallback after retries",
+          quantity: baselineQty,
+          reason: "invalid_llm_output_fallback",
         };
       }
 
       /**
-       * Failure penalty adjustment
+       * Hard fallback on retries
+       */
+      if (retries >= 3) {
+        decision = {
+          quantity: baselineQty,
+          reason: "fallback_after_retries",
+        };
+      }
+
+      /**
+       * Failure penalty (quantity-level)
        */
       const penalty = await getFailurePenalty(state.sku, {
         quantity: decision.quantity,
       });
 
       if (penalty > 0.4) {
-        console.log("High failure penalty → adjusting decision");
+        console.log("⚠️ High failure penalty → forcing baseline");
 
-        decision.quantity = Math.max(
-          gap,
-          supplier?.moq || 0
-        );
+        decision.quantity = baselineQty;
+        decision.reason = "penalty_adjusted";
       }
+
+      /**
+       * HARD CONSTRAINT
+       * Ensure reorderPoint is actually met
+       */
+      const finalStock = stock + decision.quantity;
+
+      if (finalStock < reorderPoint) {
+        decision.quantity = Math.max(
+          baselineQty,
+          reorderPoint - stock
+        );
+
+        decision.reason = "constraint_fix_reorder_point";
+      }
+
+      /**
+       * FINAL ENFORCEMENT
+       */
+      decision.quantity = Math.max(decision.quantity, baselineQty);
 
       return decision;
     },
@@ -114,6 +178,7 @@ export async function decisionAgent(state: AgentState): Promise<AgentState> {
       metadata: {
         sku: state.sku,
         retries,
+        baselineQty,
         hasForecast: !!state.forecast,
         hasContext: !!state.ragContext,
       },
