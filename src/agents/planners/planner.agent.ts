@@ -16,6 +16,11 @@ export async function plannerAgent(
       ...state,
       plan,
       strategy: meta.strategy,
+      plannerMetaData: {
+        confidence: meta.confidence,
+        riskLevel: meta.riskLevel,
+        finalScore: meta.finalScore,
+      }
     };
   } catch (err: any) {
     console.error("Planner failed:", err);

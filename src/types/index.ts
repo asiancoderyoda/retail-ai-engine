@@ -33,6 +33,11 @@ interface AgentState {
   error?: string;
   retries?: number;
   strategy?: string;
+  plannerMetaData?: {
+    confidence: number;
+    riskLevel: "low" | "medium" | "high";
+    finalScore: number;
+  };  
   _trace?: any;
 }
 

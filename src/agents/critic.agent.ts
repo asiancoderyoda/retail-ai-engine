@@ -32,7 +32,7 @@ export async function criticAgent(state: AgentState): Promise<AgentState> {
   }
 
   /**
-   * Over-ordering check (new)
+   * Over-ordering check
    */
   if (forecast) {
     const maxReasonable = forecast.predictedDemand * 2;

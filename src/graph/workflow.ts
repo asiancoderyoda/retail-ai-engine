@@ -43,6 +43,11 @@ const GraphState = Annotation.Root({
 
   plan: Annotation<PlanStep[]>(),
   strategy: Annotation<string | undefined>(),
+  plannerMetaData: Annotation<{
+    confidence: number;
+    riskLevel: "low" | "medium" | "high";
+    finalScore: number;
+  } | undefined>(),
   retries: Annotation<number>(),
   error: Annotation<string | undefined>(),
 });
